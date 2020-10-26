@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <liboffsetfinder64/ibootpatchfinder64.hpp>
 
 #define HAS_ARG(x,y) (!strcmp(argv[i], x) && (i + y) < argc)
@@ -17,6 +18,11 @@
 using namespace tihmstar::offsetfinder64;
 
 #define FLAG_UNLOCK_NVRAM (1 << 0)
+
+bool bootmode = false;
+bool debug = false;
+bool sig = false;
+bool cache = false;
 
 int main(int argc, const char * argv[]) {
     FILE* fp = NULL;
@@ -26,10 +32,15 @@ int main(int argc, const char * argv[]) {
     int flags = 0;
     
     if(argc < 3) {
+    	printf("Modified version by @exploit3dguy.\n");
         printf("Usage: %s <iboot_in> <iboot_out> [args]\n", argv[0]);
         printf("\t-b <str>\tApply custom boot args.\n");
         printf("\t-c <cmd> <ptr>\tChange a command handler's pointer (hex).\n");
         printf("\t-n \t\tApply unlock nvram patch.\n");
+        printf("\t-l \t\tApply bootmode patch.\n");
+        printf("\t-k \t\tApply kernelcache patch.\n");
+        printf("\t-s \t\tApply sigcheck patch.\n");
+        printf("\t-d \t\tApply debug-enabled patch.\n");
         return -1;
     }
     
@@ -40,7 +51,28 @@ int main(int argc, const char * argv[]) {
             custom_boot_args = (char*) argv[i+1];
         } else if(HAS_ARG("-n", 0)) {
             flags |= FLAG_UNLOCK_NVRAM;
-        }else if(HAS_ARG("-c", 2)) {
+        }else if(HAS_ARG("-l", 0)) {
+            bootmode = true;
+            
+        }
+        else if(HAS_ARG("-d", 0)) {
+            debug = true;
+
+            
+        }
+        else if(HAS_ARG("-s", 0)) {
+            sig = true;
+            
+        }
+        else if(HAS_ARG("-k", 0)) {
+            cache = true;
+            
+        }
+
+
+
+
+        else if(HAS_ARG("-c", 2)) {
             cmd_handler_str = (char*) argv[i+1];
             sscanf((char*) argv[i+2], "0x%016llX", &cmd_handler_ptr);
         }
@@ -65,6 +97,7 @@ int main(int argc, const char * argv[]) {
         
         
         /* Only bootloaders with the kernel load routines pass the DeviceTree. */
+        if (debug == true) {
         try {
             printf("getting get_debug_enabled_patch() patch\n");
             auto p = ibp->get_debug_enabled_patch();
@@ -73,6 +106,7 @@ int main(int argc, const char * argv[]) {
             printf("%s: Error doing patch_debug_enabled()!\n", __FUNCTION__);
             return -1;
         }
+    }
     }
     
     /* Ensure that the loader has a shell. */
@@ -100,7 +134,32 @@ int main(int argc, const char * argv[]) {
         }
     }
     
+    
+    if (bootmode == true) {
+            try {
+                printf("getting get_bootmode_patch() patch\n");
+                auto p = ibp->get_bootmode_patch();
+                patches.insert(patches.begin(), p.begin(), p.end());
+            } catch (...) {
+                printf("%s: Error doing get_bootmode_patch()!\n", __FUNCTION__);
+                return -1;
+            }
+        }
+    
+
+        if (cache == true) {
+            try {
+                printf("getting get_kernelcache_patch() patch\n");
+                auto p = ibp->get_kernelcache_patch();
+                patches.insert(patches.begin(), p.begin(), p.end());
+            } catch (...) {
+                printf("%s: Error doing get_kernelcache_patch()!\n", __FUNCTION__);
+                return -1;
+            }
+        }
+    
     /* All loaders have the RSA check. */
+    if (sig == true) {
     try {
         printf("getting get_sigcheck_patch() patch\n");
         auto p = ibp->get_sigcheck_patch();
@@ -108,6 +167,7 @@ int main(int argc, const char * argv[]) {
     } catch (...) {
         printf("%s: Error doing patch_rsa_check()!\n", __FUNCTION__);
         return -1;
+    }
     }
     
     
